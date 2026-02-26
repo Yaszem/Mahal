@@ -68,7 +68,7 @@ input, textarea, [contenteditable] { caret-color: #1C1C1C !important; }
     position: absolute;
     width: 560px; height: 560px;
     border-radius: 50%;
-    border: 9px solid rgba(247,246,242,0.05);
+    border: 1px solid rgba(247,246,242,0.05);
     top: -140px; right: -200px;
     pointer-events: none;
 }
@@ -417,6 +417,17 @@ def get_users() -> pd.DataFrame:
 
 def save_users(df): save_sheet(df, "Utilisateurs")
 
+def update_session_for_user(uname, new_role, new_lots_list):
+    """Met à jour le cache de session d'un utilisateur sans qu'il ait à se reconnecter."""
+    store = _session_store()
+    for token, entry in store.items():
+        u = entry.get("user", {})
+        if u.get("username", "").lower() == uname.lower():
+            u["role"] = new_role
+            u["lots_autorises"] = new_lots_list
+            entry["user"] = u
+            break
+
 # ─── Sécurité : échappement HTML et sanitisation ──────────────────────────────
 def h(val: str) -> str:
     """Échappe les caractères HTML pour prévenir le XSS."""
@@ -639,16 +650,30 @@ def page_register():
         pwd1  = st.text_input("Mot de passe", type="password", key="reg_pass", placeholder="8 car. min. avec chiffres")
         pwd2  = st.text_input("Confirmer le mot de passe", type="password", key="reg_pass2", placeholder="••••••••")
 
-        if st.button("S'inscrire →", key="btn_register", use_container_width=True):
-            if not all([uname, pwd1, pwd2, prenom, nom]): err("Remplis tous les champs."); return
-            if len(uname) < 3: err("Identifiant trop court (3 car. min.)."); return
+        if st.button("S'inscrire →", key="btn_register", use_container_width=True,
+                     disabled=st.session_state.get("registering", False)):
+            # Guard immédiat : bloquer tout re-clic avant même les validations
+            if st.session_state.get("registering", False):
+                return
+            st.session_state["registering"] = True
+
+            if not all([uname, pwd1, pwd2, prenom, nom]):
+                st.session_state.pop("registering", None); err("Remplis tous les champs."); return
+            if len(uname) < 3:
+                st.session_state.pop("registering", None); err("Identifiant trop court (3 car. min.)."); return
             if not re.match(r'^[a-zA-Z0-9_\-\.]+$', uname):
-                err("Identifiant invalide (lettres, chiffres, _ - . uniquement)."); return
-            if len(pwd1) < 8: err("Mot de passe trop court (8 car. min.)."); return
+                st.session_state.pop("registering", None); err("Identifiant invalide (lettres, chiffres, _ - . uniquement)."); return
+            if len(pwd1) < 8:
+                st.session_state.pop("registering", None); err("Mot de passe trop court (8 car. min.)."); return
             if not any(c.isdigit() for c in pwd1) or not any(c.isalpha() for c in pwd1):
-                err("Le mot de passe doit contenir lettres et chiffres."); return
-            if pwd1 != pwd2: err("Les mots de passe ne correspondent pas."); return
-            if find_user(uname): err("Nom d'utilisateur déjà pris."); return
+                st.session_state.pop("registering", None); err("Le mot de passe doit contenir lettres et chiffres."); return
+            if pwd1 != pwd2:
+                st.session_state.pop("registering", None); err("Les mots de passe ne correspondent pas."); return
+            # Vérification doublons en lisant directement Sheets (bypass cache)
+            _load_sheet_cached.clear()
+            if find_user(uname):
+                st.session_state.pop("registering", None); err("Nom d'utilisateur déjà pris."); return
+
             is_first = not admin_exists()
             new_u = {"username": sanitize_text(uname),
                      "password_hash": hash_password(pwd1),
@@ -659,9 +684,15 @@ def page_register():
                      "nom":    sanitize_text(nom.upper()),
                      "prenom": sanitize_text(prenom.capitalize())}
             try:
-                append_row(new_u, "Utilisateurs")
-                ok("Compte créé ! Tu peux te connecter." if is_first else "Inscription envoyée — en attente d'approbation.")
-            except Exception as e: err(f"Erreur : {e}")
+                with st.spinner("Enregistrement…"):
+                    append_row(new_u, "Utilisateurs")
+                    _load_sheet_cached.clear()
+                msg = "Compte créé ! Tu peux te connecter." if is_first else "Inscription envoyée — en attente d'approbation."
+                ok(msg)
+                st.session_state.pop("registering", None)
+            except Exception as e:
+                st.session_state.pop("registering", None)
+                err(f"Erreur : {e}")
 
         st.markdown('<div class="auth-divider">ou</div>', unsafe_allow_html=True)
         if st.button("Retour à la connexion", key="btn_go_login", use_container_width=True):
@@ -1086,14 +1117,26 @@ if is_admin:
                     pc1, pc2, pc3 = st.columns([3,1,1], gap="small")
                     with pc1: lots_sel = st.multiselect("Lots autorisés", options=lots_all, key=f"lots_{uname}")
                     with pc2:
-                        if st.button("✓ Approuver", key=f"approve_{uname}"):
-                            users_df.loc[users_df["username"]==uname,"statut"] = "approuvé"
-                            users_df.loc[users_df["username"]==uname,"lots_autorises"] = ",".join(lots_sel)
-                            save_users(users_df); ok(f"{uname} approuvé."); st.rerun()
+                        if st.button("✓ Approuver", key=f"approve_{uname}",
+                                     disabled=st.session_state.get(f"approving_{uname}", False)):
+                            if not st.session_state.get(f"approving_{uname}", False):
+                                st.session_state[f"approving_{uname}"] = True
+                                with st.spinner(""):
+                                    users_df.loc[users_df["username"]==uname,"statut"] = "approuvé"
+                                    users_df.loc[users_df["username"]==uname,"lots_autorises"] = ",".join(lots_sel)
+                                    save_users(users_df)
+                                    _load_sheet_cached.clear()
+                                st.rerun()
                     with pc3:
-                        if st.button("✗ Refuser", key=f"reject_{uname}"):
-                            users_df.loc[users_df["username"]==uname,"statut"] = "rejeté"
-                            save_users(users_df); warn(f"{uname} refusé."); st.rerun()
+                        if st.button("✗ Refuser", key=f"reject_{uname}",
+                                     disabled=st.session_state.get(f"rejecting_{uname}", False)):
+                            if not st.session_state.get(f"rejecting_{uname}", False):
+                                st.session_state[f"rejecting_{uname}"] = True
+                                with st.spinner(""):
+                                    users_df.loc[users_df["username"]==uname,"statut"] = "rejeté"
+                                    save_users(users_df)
+                                    _load_sheet_cached.clear()
+                                st.rerun()
             st.markdown("---")
 
         # ── Tous les utilisateurs ───────────────────────────────────────────────
@@ -1134,13 +1177,20 @@ if is_admin:
                 with ac3:
                     new_role = st.selectbox("Rôle", ["visiteur","admin"], index=0 if row["role"]=="visiteur" else 1, key=f"role_{uname}")
                 with ac4:
-                    if st.button("Sauvegarder", key=f"save_{uname}"):
-                        users_df.loc[users_df["username"]==uname,"lots_autorises"] = ",".join(new_lots)
-                        users_df.loc[users_df["username"]==uname,"role"] = new_role
-                        save_users(users_df); ok(f"{uname} mis à jour."); st.rerun()
-                    if st.button("Supprimer", key=f"del_{uname}"):
-                        users_df = users_df[users_df["username"]!=uname]
-                        save_users(users_df); ok(f"{uname} supprimé."); st.rerun()
+                    if st.button("Sauvegarder", key=f"save_{uname}", disabled=st.session_state.get(f"saving_{uname}", False)):
+                        st.session_state[f"saving_{uname}"] = True
+                        with st.spinner("Enregistrement…"):
+                            users_df.loc[users_df["username"]==uname, "lots_autorises"] = ",".join(new_lots)
+                            users_df.loc[users_df["username"]==uname, "role"] = new_role
+                            save_users(users_df)
+                            update_session_for_user(uname, new_role, new_lots)
+                        st.rerun()
+                    if st.button("Supprimer", key=f"del_{uname}", disabled=st.session_state.get(f"deleting_{uname}", False)):
+                        st.session_state[f"deleting_{uname}"] = True
+                        with st.spinner("Suppression…"):
+                            users_df = users_df[users_df["username"] != uname]
+                            save_users(users_df)
+                        st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VISITEUR

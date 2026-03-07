@@ -108,8 +108,61 @@ div[data-testid="stAlert"][data-alert-type="warning"],div[data-testid="stAlert"]
 .stWarning>div,.stInfo>div{background:#F5F3EE !important;border:1px solid #DDDAD2 !important;color:#1C1C1C !important;border-radius:8px !important}
 div[class*="stAlert"]{color:#1C1C1C !important}
 div[class*="stAlert"]*{color:#1C1C1C !important}
+
+/* ── DATA EDITOR — correction visibilité dropdown ── */
 [data-testid="stDataEditor"]{background:#FFFFFF !important;border:1px solid #E0DDD5 !important;border-radius:10px !important;overflow:hidden !important}
 [data-testid="stDataEditor"] input,[data-testid="stDataEditor"] textarea{color:#1C1C1C !important;-webkit-text-fill-color:#1C1C1C !important;background:#FFFFFF !important;caret-color:#1C1C1C !important;font-family:'DM Sans',sans-serif !important;font-size:0.88rem !important}
+/* Cellules du tableau éditables */
+[data-testid="stDataEditor"] [role="gridcell"]{color:#1C1C1C !important;font-family:'DM Sans',sans-serif !important;font-size:0.85rem !important}
+/* Dropdown des colonnes SelectboxColumn dans data_editor */
+[data-testid="stDataEditor"] [role="option"],
+[data-testid="stDataEditor"] [role="listbox"] li,
+[data-testid="stDataEditor"] [role="listbox"] [role="option"]{
+  color:#1C1C1C !important;
+  background:#FFFFFF !important;
+  font-family:'DM Sans',sans-serif !important;
+  font-size:0.88rem !important;
+}
+[data-testid="stDataEditor"] [role="listbox"]{
+  background:#FFFFFF !important;
+  border:1px solid #E0DDD5 !important;
+  border-radius:8px !important;
+  box-shadow:0 4px 16px rgba(28,28,28,0.12) !important;
+}
+/* Glide-data-grid: overlay portals pour les dropdowns */
+div[class*="gdg-"][role="listbox"],
+div[class*="gdg-"] [role="listbox"],
+div[class*="gdg-"] [role="option"]{
+  color:#1C1C1C !important;
+  background:#FFFFFF !important;
+  font-family:'DM Sans',sans-serif !important;
+}
+div[class*="gdg-"] [role="option"]:hover{background:#F0EDE5 !important}
+/* Portals montés à la racine du body */
+body > div[role="listbox"],
+body > div [role="listbox"]{
+  background:#FFFFFF !important;
+  border:1px solid #E0DDD5 !important;
+  border-radius:8px !important;
+  box-shadow:0 4px 16px rgba(28,28,28,0.14) !important;
+  z-index:99999 !important;
+}
+body > div[role="listbox"] [role="option"],
+body > div [role="listbox"] [role="option"]{
+  color:#1C1C1C !important;
+  background:#FFFFFF !important;
+  font-family:'DM Sans',sans-serif !important;
+  font-size:0.88rem !important;
+  padding:0.5rem 0.9rem !important;
+}
+body > div[role="listbox"] [role="option"]:hover,
+body > div [role="listbox"] [role="option"]:hover,
+body > div[role="listbox"] [role="option"][aria-selected="true"],
+body > div [role="listbox"] [role="option"][aria-selected="true"]{
+  background:#F0EDE5 !important;
+  color:#1C1C1C !important;
+}
+/* Overlay popover générique Streamlit */
 [data-baseweb="popover"]>div,div[data-popper-placement]{background:#FFFFFF !important;border:1px solid #E0DDD5 !important;border-radius:8px !important;box-shadow:0 4px 12px rgba(0,0,0,0.08) !important}
 [data-baseweb="popover"] *,div[data-popper-placement]*{color:#1C1C1C !important}
 
@@ -174,9 +227,6 @@ div[class*="stAlert"]*{color:#1C1C1C !important}
   padding:1.2rem 1.8rem;border-top:1px solid #F0EDE5;flex-shrink:0;
   font-size:0.68rem;color:#CCC;letter-spacing:0.1em;text-transform:uppercase
 }
-/* hamburger handled inside components.html iframe */
-
-/* Active tab indicator in topbar */
 .active-tab-pill{
   display:inline-flex;align-items:center;gap:0.4rem;
   background:#F0EDE5;border:1px solid #DDDAD2;border-radius:20px;
@@ -383,7 +433,6 @@ for k, v in [("authenticated", False), ("username", ""), ("role", ""),
               ("lots_autorises", []), ("auth_page", "login"), ("_sess_token", "")]:
     if k not in st.session_state: st.session_state[k] = v
 
-# Capture ?nav= BEFORE auth check so it survives the full page load
 _early_nav = st.query_params.get("nav", "")
 if _early_nav:
     st.session_state["_pending_nav"] = _early_nav
@@ -977,7 +1026,6 @@ personnes_existantes = sorted([p for p in transactions['Personne'].dropna().asty
 pending_count = count_pending() if is_admin else 0
 
 # ─── DRAWER MENU SETUP ────────────────────────────────────────────────────────
-# Define navigation items per role
 if is_admin:
     nav_items = [
         {"key": "nouvelle_transaction", "label": "Nouvelle transaction", "icon": "✚", "section": "Saisie"},
@@ -1005,11 +1053,9 @@ else:
         {"key": "graphiques","label": "Graphiques", "icon": "◈", "section": "Analyse"},
     ]
 
-# Initialize active page
 if "active_page" not in st.session_state:
     st.session_state.active_page = nav_items[0]["key"]
 
-# Apply pending navigation captured early (before auth check)
 _pnav = st.session_state.pop("_pending_nav", None)
 if _pnav is None:
     _pnav = st.query_params.get("nav", "")
@@ -1058,7 +1104,6 @@ st.markdown(f"""
   </div>
 </div>""", unsafe_allow_html=True)
 
-# Logout button (small, positioned below topbar)
 dcol = st.columns([8, 1])[1]
 with dcol:
     if st.button("Déco.", key="btn_logout"):
@@ -1085,7 +1130,6 @@ st.markdown(f"""
 </div>""", unsafe_allow_html=True)
 
 # ─── BUILD DRAWER HTML ────────────────────────────────────────────────────────
-# Group items by section
 sections_order = []
 sections_map = {}
 for item in nav_items:
@@ -1132,10 +1176,7 @@ for _it in _nav_items_for_drawer:
         + _bdg + '</button>'
     )
 
-# Escape nav html for JS template literal
 _dih_js = _dih.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
-
-# Safe token escaping
 _tok_js = current_token.replace("\\", "\\\\").replace('"', '\\"')
 
 _html_parts = [
@@ -1146,29 +1187,24 @@ _html_parts = [
     'var nav_html=`' + _dih_js + '`;',
     'var pdoc=window.parent.document;',
     '["__mahal_btn","__mahal_overlay","__mahal_drawer"].forEach(function(id){var el=pdoc.getElementById(id);if(el)el.remove();});',
-    # Hamburger button
     'var btn=pdoc.createElement("button");',
     'btn.id="__mahal_btn";',
     'btn.style.cssText="position:fixed;top:1.4rem;right:1.6rem;z-index:99999;width:38px;height:38px;border-radius:10px;background:#1C1C1C;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;box-shadow:0 2px 12px rgba(28,28,28,0.18)";',
     'btn.innerHTML=\'<span style="display:block;width:16px;height:1.5px;background:#F7F6F2;border-radius:2px"></span><span style="display:block;width:16px;height:1.5px;background:#F7F6F2;border-radius:2px"></span><span style="display:block;width:16px;height:1.5px;background:#F7F6F2;border-radius:2px"></span>\';',
     'pdoc.body.appendChild(btn);',
-    # Overlay
     'var ov=pdoc.createElement("div");',
     'ov.id="__mahal_overlay";',
     'ov.style.cssText="display:none;position:fixed;inset:0;background:rgba(28,28,28,0.35);z-index:99997;cursor:pointer";',
     'pdoc.body.appendChild(ov);',
-    # Drawer
     'var dr=pdoc.createElement("div");',
     'dr.id="__mahal_drawer";',
     'dr.style.cssText="position:fixed;top:0;right:-320px;width:300px;height:100vh;background:#FFFFFF;border-left:1px solid #E0DDD5;z-index:99998;transition:right 0.35s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;overflow:hidden;box-shadow:-8px 0 32px rgba(28,28,28,0.08)";',
     'var hdr=\'<div style="padding:2rem 1.8rem 1.4rem;border-bottom:1px solid #F0EDE5;display:flex;justify-content:space-between;align-items:flex-end;flex-shrink:0"><div style="font-size:1.6rem;color:#1C1C1C;letter-spacing:-0.02em">Mahal</div><button id=\\"__mahal_close\\" style=\\"width:30px;height:30px;border-radius:50%;border:1px solid #E0DDD5;background:#F7F6F2;cursor:pointer;display:flex;align-items:center;justify-content:center\\"><svg width=\\"12\\" height=\\"12\\" viewBox=\\"0 0 12 12\\" fill=\\"none\\"><path d=\\"M1 1l10 10M11 1L1 11\\" stroke=\\"#1C1C1C\\" stroke-width=\\"1.5\\" stroke-linecap=\\"round\\"/></svg></button></div>\';',
     'dr.innerHTML=hdr+\'<div id=\\"__mahal_nav\\" style=\\"flex:1;overflow-y:auto;padding-bottom:1.5rem\\">\'+nav_html+\'</div><div style=\\"padding:1.2rem 1.8rem;border-top:1px solid #F0EDE5;font-size:0.68rem;color:#CCC;letter-spacing:0.1em;text-transform:uppercase\\">2025 Plateforme</div>\';',
     'pdoc.body.appendChild(dr);',
-    # Functions
     'function openDrawer(){dr.style.right="0";ov.style.display="block";pdoc.body.style.overflow="hidden";}',
     'function closeDrawer(){dr.style.right="-320px";ov.style.display="none";pdoc.body.style.overflow="";}',
     'function navTo(key){closeDrawer();var a=pdoc.createElement("a");var url=pdoc.location.pathname+"?nav="+encodeURIComponent(key);if(TOKEN)url+="&t="+encodeURIComponent(TOKEN);a.href=url;a.style.display="none";pdoc.body.appendChild(a);a.click();a.remove();}',
-    # Events
     'btn.addEventListener("click",function(e){e.stopPropagation();openDrawer();});',
     'ov.addEventListener("click",closeDrawer);',
     'setTimeout(function(){',
@@ -1181,13 +1217,8 @@ _html_parts = [
     '})();</script></body></html>',
 ]
 
-_html = "\n".join(_html_parts)
-components.html(_html, height=0, scrolling=False)
-
-# drawer navigation handled via anchor click in iframe
-
-
-
+_drawer_html = "\n".join(_html_parts)
+components.html(_drawer_html, height=0, scrolling=False)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1281,7 +1312,7 @@ def render_edit_transaction_form(transactions_df, lots_filter=None, personne_fil
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PAGE RENDERER — switches on active_page
+# PAGE RENDERER
 # ═══════════════════════════════════════════════════════════════════════════════
 def render_page():
     page = st.session_state.active_page
@@ -1452,11 +1483,11 @@ def render_page():
 
     # ── SUIVI DES AVANCES ─────────────────────────────────────────────────────
     elif page == "suivi_avances":
-        st.markdown('<div class="section-title">Suivi des avances</div>', unsafe_allow_html=True)
-        st.dataframe(compute_suivi_avances(transactions), width='stretch', hide_index=True)
-
         st.markdown('<div class="section-title">Modifier les transactions</div>', unsafe_allow_html=True)
         st.caption("Cliquez sur une cellule pour la modifier directement.")
+
+        # ── Info bulle pour aider l'utilisateur ──
+        
         ef1, ef2, ef3 = st.columns(3, gap="large")
         with ef1:
             lots_edit_opts = ["Tous"]+sorted(transactions_all['Lot'].dropna().astype(str).unique().tolist())
@@ -1594,6 +1625,7 @@ def render_page():
         if df_sa_view.empty:
             st.info("Aucune transaction à afficher pour votre compte.")
         else:
+            # Info bulle pour aider l'utilisateu
             lots_sa_disp = ["Tous"]+sorted(df_sa_view['Lot'].dropna().astype(str).unique().tolist())
             fsa_lot = st.selectbox("Filtrer par lot", lots_sa_disp, key="sa_edit_flot")
             if fsa_lot != "Tous": df_sa_view = df_sa_view[df_sa_view['Lot']==fsa_lot]
